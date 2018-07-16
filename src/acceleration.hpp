@@ -41,16 +41,9 @@ class Acceleration {
   void tearDown();
 
   void run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleTime);
-  bool slamParams();
-  Eigen::VectorXf curveFit(Eigen::MatrixXf matrix);
-  Eigen::RowVector2f traceBackToClosestPoint(Eigen::RowVector2f, Eigen::RowVector2f, Eigen::RowVector2f);
-  Eigen::MatrixXf placeEquidistantPoints(Eigen::MatrixXf, bool, int, float);
   Eigen::MatrixXf orderCones(Eigen::MatrixXf localPath);
   std::tuple<float, float> driverModelSteering(Eigen::MatrixXf, float, float);
-  float driverModelSharp(Eigen::MatrixXf, float);
   float driverModelVelocity(Eigen::MatrixXf, float, float, float, float, float, float, float, bool, bool);
-  std::vector<float> curvatureTriCircle(Eigen::MatrixXf, int);
-  std::vector<float> curvaturePolyFit(Eigen::MatrixXf);
 
   /* commandlineArguments */
   cluon::OD4Session &m_od4;
@@ -125,18 +118,7 @@ class Acceleration {
   std::chrono::time_point<std::chrono::system_clock> m_steerTickDt;
   std::chrono::time_point<std::chrono::system_clock> m_steerTockDt;
   bool m_newClock;
-  bool m_brakingState;
-  bool m_accelerationState;
-  bool m_rollingState;
-  float m_timeToCritVel;
-  float m_accClock;
-  float m_minRadius;
-  float m_apexRadius;
   bool m_specCase;
-  float m_ei;
-  float m_ePrev;
-  float m_fullTime;
-  bool m_start;
   float m_prevHeadingRequest;
   bool m_slamActivated;
   bool m_paramsUpdated;
