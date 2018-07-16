@@ -224,7 +224,7 @@ void Acceleration::run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleT
       }
     }
 
-    auto steering = Acceleration::driverModelSteering(localPath, groundSpeedCopy, m_previewTime);
+    auto steering = Acceleration::driverModelSteering(localPath);
     headingRequest = std::get<0>(steering);
     distanceToAimPoint = std::get<1>(steering);
   }
@@ -306,15 +306,33 @@ Eigen::MatrixXf Acceleration::orderCones(Eigen::MatrixXf localPath)
 } // End of orderCones
 
 
-std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf localPath, float groundSpeedCopy, float previewTime) {
+void Acceleration::Cartesian2Spherical(float x, float y, float z, opendlv::logic::sensation::Point &pointInSpherical)
+{
+  double distance = sqrt(x*x+y*y+z*z);
+  double azimuthAngle = atan2(y,x)*static_cast<double>(RAD2DEG);
+  double zenithAngle = atan2(z,sqrt(x*x+y*y))*static_cast<double>(RAD2DEG);
+  pointInSpherical.distance(static_cast<float>(distance));
+  pointInSpherical.azimuthAngle(static_cast<float>(azimuthAngle));
+  pointInSpherical.zenithAngle(static_cast<float>(zenithAngle));
+} // End of Cartesian2Spherical
+
+
+std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf localPath) {
   float headingRequest = 0.0f;
   float distanceToAimPoint = 0.0f;
 
-//-------------To avoid unused variables---------------
-std::cout << localPath.rows() << std::endl;
-std::cout << groundSpeedCopy << std::endl;
-std::cout << previewTime << std::endl;
-//-----------------------------------------------------
+  Eigen::MatrixXf vectorFromPath = localPath.row(localPath.rows())-localPath.row(0);
+  vectorFromPath = vectorFromPath/(vectorFromPath.norm());
+  Eigen::MatrixXf aimp1 = localPath.row(1) + 50*vectorFromPath;
+
+  Eigen::MatrixXf vectorFromVehicle = localPath.row(localPath.rows())/((localPath.row(localPath.rows())).norm());
+  Eigen::MatrixXf aimp2 = 50*vectorFromVehicle;
+
+  Eigen::MatrixXf combinedAimPoint = (aimp1 + aimp2)/2;
+  opendlv::logic::sensation::Point sphericalPoint;
+  Cartesian2Spherical(combinedAimPoint(0,0), combinedAimPoint(0,1), 0, sphericalPoint);
+  headingRequest = sphericalPoint.azimuthAngle();
+  distanceToAimPoint = sphericalPoint.distance();
 
   m_steerTockDt = std::chrono::system_clock::now();
   std::chrono::duration<float> DT = m_steerTockDt-m_steerTickDt;

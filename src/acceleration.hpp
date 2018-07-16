@@ -42,7 +42,8 @@ class Acceleration {
 
   void run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleTime);
   Eigen::MatrixXf orderCones(Eigen::MatrixXf localPath);
-  std::tuple<float, float> driverModelSteering(Eigen::MatrixXf, float, float);
+  void Cartesian2Spherical(float, float, float, opendlv::logic::sensation::Point &);
+  std::tuple<float, float> driverModelSteering(Eigen::MatrixXf);
   float driverModelVelocity(Eigen::MatrixXf, float, float, float, float, float, float, float, bool, bool);
 
   /* commandlineArguments */
@@ -123,6 +124,7 @@ class Acceleration {
   bool m_slamActivated;
   bool m_paramsUpdated;
   std::mutex m_sendMutex;
+  const double RAD2DEG = 57.295779513082325; // 1.0 / DEG2RAD
 };
 
 #endif
