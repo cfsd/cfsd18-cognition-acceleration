@@ -54,6 +54,8 @@ class Acceleration {
   float m_distanceBetweenPoints{0.5f};
   bool m_traceBack{false};
   // steering
+  float m_trustInLastPathPoint{0.5f};
+  float m_aimDistance{50.0f};
   bool m_moveOrigin{true};
   bool m_curveFitPath{true};
   float m_previewTime{0.3f};

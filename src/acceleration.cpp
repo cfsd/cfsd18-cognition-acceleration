@@ -55,6 +55,8 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
   m_distanceBetweenPoints=(commandlineArguments["distanceBetweenPoints"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["distanceBetweenPoints"]))) : (m_distanceBetweenPoints);
   m_traceBack=(commandlineArguments["useTraceBack"].size() != 0) ? (std::stoi(commandlineArguments["useTraceBack"])==1) : (false);
   // steering
+  m_trustInLastPathPoint=(commandlineArguments["trustInLastPathPoint"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["trustInLastPathPoint"]))) : (m_trustInLastPathPoint);
+  m_aimDistance=(commandlineArguments["aimDistance"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aimDistance"]))) : (m_aimDistance);
   m_moveOrigin=(commandlineArguments["useMoveOrigin"].size() != 0) ? (std::stoi(commandlineArguments["useMoveOrigin"])==1) : (true);
   m_curveFitPath=(commandlineArguments["useCurveFitPath"].size() != 0) ? (std::stoi(commandlineArguments["useCurveFitPath"])==1) : (true);
   m_previewTime=(commandlineArguments["previewTime"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["previewTime"]))) : (m_previewTime);
@@ -323,12 +325,12 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
 
   Eigen::MatrixXf vectorFromPath = localPath.row(localPath.rows())-localPath.row(0);
   vectorFromPath = vectorFromPath/(vectorFromPath.norm());
-  Eigen::MatrixXf aimp1 = localPath.row(1) + 50*vectorFromPath;
+  Eigen::MatrixXf aimp1 = localPath.row(1) + m_aimDistance*vectorFromPath;
 
   Eigen::MatrixXf vectorFromVehicle = localPath.row(localPath.rows())/((localPath.row(localPath.rows())).norm());
-  Eigen::MatrixXf aimp2 = 50*vectorFromVehicle;
+  Eigen::MatrixXf aimp2 = m_aimDistance*vectorFromVehicle;
 
-  Eigen::MatrixXf combinedAimPoint = (aimp1 + aimp2)/2;
+  Eigen::MatrixXf combinedAimPoint = aimp1 + m_trustInLastPathPoint*(aimp2 - aimp1);
   opendlv::logic::sensation::Point sphericalPoint;
   Cartesian2Spherical(combinedAimPoint(0,0), combinedAimPoint(0,1), 0, sphericalPoint);
   headingRequest = sphericalPoint.azimuthAngle();
