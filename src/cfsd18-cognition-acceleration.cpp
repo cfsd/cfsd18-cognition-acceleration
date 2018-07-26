@@ -38,11 +38,12 @@ int32_t main(int32_t argc, char **argv) {
   } else {
     uint32_t const surfaceId=(commandlineArguments["surfaceId"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["surfaceId"])) : (0);
     uint32_t const speedId=(commandlineArguments["speedId"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["speedId"])) : (0);
-    uint32_t const slamId=(commandlineArguments["slamId"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["slamId"])) : (0);
     uint32_t id = (commandlineArguments.count("id")>0)?(static_cast<uint32_t>(std::stoi(commandlineArguments["id"]))):(221);
+    uint16_t const cidWheelSpeed{(commandlineArguments["cidWheelSpeed"].size() != 0) ? static_cast<uint16_t>(std::stoi(commandlineArguments["cidWheelSpeed"])) : (uint16_t) 219};
     // Interface to a running OpenDaVINCI session
     cluon::data::Envelope data;
     cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
+    cluon::OD4Session od4WS{cidWheelSpeed};
     Acceleration acceleration(commandlineArguments, od4);
     int gatheringTimeMs = (commandlineArguments.count("gatheringTimeMs")>0)?(std::stoi(commandlineArguments["gatheringTimeMs"])):(50);
     int separationTimeMs = (commandlineArguments.count("separationTimeMs")>0)?(std::stoi(commandlineArguments["separationTimeMs"])):(10);
@@ -55,25 +56,18 @@ int32_t main(int32_t argc, char **argv) {
         }
       }
     };
-    auto speedEnvelope{[&surfer = acceleration, senderStamp = speedId](cluon::data::Envelope &&envelope)
+    auto nextEnvelope{[&surfer = acceleration, speedId, surfaceId](cluon::data::Envelope &&envelope)
       {
-        if(envelope.senderStamp() == senderStamp){
-          surfer.nextContainer(envelope);
-        }
-      }
-    };
-    auto slamEnvelope{[&surfer = acceleration, senderStamp = slamId](cluon::data::Envelope &&envelope)
-      {
-        if(envelope.senderStamp() == senderStamp){
+        if(envelope.senderStamp() == speedId || envelope.senderStamp() == surfaceId){
           surfer.nextContainer(envelope);
         }
       }
     };
 
+    od4WS.dataTrigger(opendlv::proxy::GroundSpeedReading::ID(),nextEnvelope);
     od4.dataTrigger(opendlv::logic::perception::GroundSurfaceArea::ID(),surfaceEnvelope);
-    od4.dataTrigger(opendlv::proxy::GroundSpeedReading::ID(),speedEnvelope);
-    od4.dataTrigger(opendlv::proxy::AccelerationReading::ID(),speedEnvelope);
-    od4.dataTrigger(opendlv::logic::perception::ObjectDirection::ID(),slamEnvelope);
+    od4.dataTrigger(opendlv::logic::perception::GroundSurfaceProperty::ID(),nextEnvelope);
+    od4.dataTrigger(opendlv::proxy::GroundSpeedReading::ID(),nextEnvelope);
 
 
     // Just sleep as this microservice is data driven.

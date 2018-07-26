@@ -126,10 +126,8 @@ void Acceleration::nextContainer(cluon::data::Envelope &a_container)
     auto groundSpeed = cluon::extractMessage<opendlv::proxy::GroundSpeedReading>(std::move(a_container));
     m_groundSpeed = groundSpeed.groundSpeed();
   }
-  else if (a_container.dataType() == opendlv::proxy::AccelerationReading::ID()) {
-    std::unique_lock<std::mutex> lockLateralAcceleration(m_lateralAccelerationMutex);
-    auto lateralAcceleration = cluon::extractMessage<opendlv::proxy::AccelerationReading>(std::move(a_container));
-    m_lateralAcceleration = lateralAcceleration.accelerationY();
+  else if (a_container.dataType() == opendlv::logic::perception::GroundSurfaceProperty::ID()) {
+    m_STOP = true;
   }
 }
 
