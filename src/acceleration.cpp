@@ -52,7 +52,12 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
 {
   m_senderStamp=(commandlineArguments["id"].size() != 0) ? (static_cast<int>(std::stoi(commandlineArguments["id"]))) : (m_senderStamp);
   // steering
-  m_trustInLastPathPoint=(commandlineArguments["trustInLastPathPoint"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["trustInLastPathPoint"]))) : (m_trustInLastPathPoint);
+  m_staticTrustInLastPathPoint=(commandlineArguments["staticTrustInLastPathPoint"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["staticTrustInLastPathPoint"]))) : (m_staticTrustInLastPathPoint);
+  m_useDynamicTrust=(commandlineArguments["useDynamicTrust"].size() != 0) ? (std::stoi(commandlineArguments["useDynamicTrust"])==1) : (false);
+  m_lowTrustLimDistance=(commandlineArguments["lowTrustLimDistance"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["lowTrustLimDistance"]))) : (m_lowTrustLimDistance);
+  m_highTrustLimDistance=(commandlineArguments["highTrustLimDistance"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["highTrustLimDistance"]))) : (m_highTrustLimDistance);
+  m_lowTrustLim=(commandlineArguments["lowTrustLim"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["lowTrustLim"]))) : (m_lowTrustLim);
+  m_highTrustLim=(commandlineArguments["highTrustLim"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["highTrustLim"]))) : (m_highTrustLim);
   m_aimDistance=(commandlineArguments["aimDistance"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aimDistance"]))) : (m_aimDistance);
   m_moveOrigin=(commandlineArguments["useMoveOrigin"].size() != 0) ? (std::stoi(commandlineArguments["useMoveOrigin"])==1) : (true);
   m_steerRate=(commandlineArguments["steerRate"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["steerRate"]))) : (m_steerRate);
@@ -298,7 +303,22 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   Eigen::MatrixXf vectorFromVehicle = localPath.row(localPath.rows()-1)/((localPath.row(localPath.rows()-1)).norm());
   Eigen::MatrixXf aimp2 = m_aimDistance*vectorFromVehicle;
 
-  Eigen::MatrixXf combinedAimPoint = aimp1 + m_trustInLastPathPoint*(aimp2 - aimp1);
+  float trustInLastPathPoint;
+  if(m_useDynamicTrust){
+    // If distance is between two limits, trust increases linearly
+    float distanceToLastPathPoint = (localPath.row(localPath.rows()-1)).norm();
+    if(distanceToLastPathPoint < m_lowTrustLimDistance){
+      trustInLastPathPoint = m_lowTrustLim;
+    }else if(distanceToLastPathPoint > m_highTrustLimDistance){
+      trustInLastPathPoint = m_highTrustLim;
+    }else{
+      trustInLastPathPoint = (distanceToLastPathPoint - m_lowTrustLimDistance)*(m_highTrustLim - m_lowTrustLim)/(m_highTrustLimDistance - m_lowTrustLimDistance) + m_lowTrustLim;
+    } // End of else
+  }else{
+    trustInLastPathPoint = m_staticTrustInLastPathPoint;
+  } // End of else
+
+  Eigen::MatrixXf combinedAimPoint = aimp1 + trustInLastPathPoint*(aimp2 - aimp1);
   opendlv::logic::sensation::Point sphericalPoint;
   Cartesian2Spherical(combinedAimPoint(0,0), combinedAimPoint(0,1), 0, sphericalPoint);
   headingRequest = sphericalPoint.azimuthAngle();

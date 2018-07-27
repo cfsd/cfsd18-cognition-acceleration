@@ -50,7 +50,12 @@ class Acceleration {
   cluon::OD4Session &m_od4;
   int m_senderStamp{221};
   // steering
-  float m_trustInLastPathPoint{0.5f};
+  float m_staticTrustInLastPathPoint{0.5f};
+  bool m_useDynamicTrust{false};
+  float m_lowTrustLimDistance{10.0f};
+  float m_highTrustLimDistance{20.0f};
+  float m_lowTrustLim{0.0f};
+  float m_highTrustLim{1.0f};
   float m_aimDistance{50.0f};
   bool m_moveOrigin{true};
   float m_steerRate{50.0f};
