@@ -300,8 +300,16 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   vectorFromPath = vectorFromPath/(vectorFromPath.norm());
   Eigen::MatrixXf aimp1 = localPath.row(0) + m_aimDistance*vectorFromPath;
 
+  float pathPointAimDistance;
+  if(!m_useDynamicTrust && m_staticTrustInLastPathPoint > 0.99f){
+    // For easier visualization in this simple case
+    pathPointAimDistance = (localPath.row(localPath.rows()-1)).norm();
+  }else{
+    pathPointAimDistance = m_aimDistance;
+  }
+
   Eigen::MatrixXf vectorFromVehicle = localPath.row(localPath.rows()-1)/((localPath.row(localPath.rows()-1)).norm());
-  Eigen::MatrixXf aimp2 = m_aimDistance*vectorFromVehicle;
+  Eigen::MatrixXf aimp2 = pathPointAimDistance*vectorFromVehicle;
 
   float trustInLastPathPoint;
   if(m_useDynamicTrust){
