@@ -52,6 +52,7 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
 {
   m_senderStamp=(commandlineArguments["id"].size() != 0) ? (static_cast<int>(std::stoi(commandlineArguments["id"]))) : (m_senderStamp);
   // steering
+  m_usePathMemory=(commandlineArguments["usePathMemory"].size() != 0) ? (std::stoi(commandlineArguments["usePathMemory"])==1) : (true);
   m_staticTrustInLastPathPoint=(commandlineArguments["staticTrustInLastPathPoint"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["staticTrustInLastPathPoint"]))) : (m_staticTrustInLastPathPoint);
   m_useDynamicTrust=(commandlineArguments["useDynamicTrust"].size() != 0) ? (std::stoi(commandlineArguments["useDynamicTrust"])==1) : (false);
   m_lowTrustLimDistance=(commandlineArguments["lowTrustLimDistance"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["lowTrustLimDistance"]))) : (m_lowTrustLimDistance);
@@ -156,15 +157,17 @@ void Acceleration::run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleT
     m_STOP = true;
   }
   else if (localPath.rows()>2) {
-    // Order path
-    localPath = orderCones(localPath);
-    // Remove negative path points
-    if (localPath(0,0)<0.0f) {
-      while (localPath(count,0)<0.0f){
-        count++;
-        if (count>localPath.rows()-1) {
-          noPath = true;
-          break;
+    if(!m_usePathMemory){
+      // Order path
+      localPath = orderCones(localPath);
+      // Remove negative path points
+      if (localPath(0,0)<0.0f) {
+        while (localPath(count,0)<0.0f){
+          count++;
+          if (count>localPath.rows()-1) {
+            noPath = true;
+            break;
+          }
         }
       }
     }
@@ -279,26 +282,36 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
     Eigen::MatrixXf foo = Eigen::MatrixXf::Zero(localPath.rows(),2);
     foo.col(0).fill(m_frontToCog);
     localPath = localPath-foo;
-    // Remove negative path points
-    if (localPath(0,0)<0.0f && localPath.rows()>0) {
-      int count = 0;
-      while (localPath(count,0)<0.0f){
+
+    if(!m_usePathMemory){
+      // Remove negative path points
+      if (localPath(0,0)<0.0f && localPath.rows()>0) {
+        int count = 0;
+        while (localPath(count,0)<0.0f){
           count++;
           if (count>localPath.rows()-1) {
             noPath = true;
             break;
           }
-      }
-      if(!noPath && count>0){
+        }
+        if(!noPath && count>0){
           Eigen::MatrixXf localPathTmp = localPath.bottomRows(localPath.rows()-count);
           localPath.resize(localPath.rows()-count,2);
           localPath = localPathTmp;
+        }
       }
     }
+
   }
   Eigen::MatrixXf vectorFromPath = localPath.row(localPath.rows()-1)-localPath.row(0);
   vectorFromPath = vectorFromPath/(vectorFromPath.norm());
   Eigen::MatrixXf aimp1 = localPath.row(0) + m_aimDistance*vectorFromPath;
+
+  if(m_usePathMemory && aimp1.norm() < 10){
+    m_STOP = true;
+    m_aimDistance = m_aimDistance + 50.0f;
+    aimp1 = localPath.row(0) + m_aimDistance*vectorFromPath;
+  }
 
   float pathPointAimDistance;
   if(!m_useDynamicTrust && m_staticTrustInLastPathPoint > 0.99f){
@@ -323,7 +336,11 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
       trustInLastPathPoint = (distanceToLastPathPoint - m_lowTrustLimDistance)*(m_highTrustLim - m_lowTrustLim)/(m_highTrustLimDistance - m_lowTrustLimDistance) + m_lowTrustLim;
     } // End of else
   }else{
-    trustInLastPathPoint = m_staticTrustInLastPathPoint;
+    if(m_usePathMemory){
+      trustInLastPathPoint = 0;
+    }else{
+      trustInLastPathPoint = m_staticTrustInLastPathPoint;
+    }
   } // End of else
 
   Eigen::MatrixXf combinedAimPoint = aimp1 + trustInLastPathPoint*(aimp2 - aimp1);
