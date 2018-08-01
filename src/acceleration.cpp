@@ -55,6 +55,7 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
   m_senderStamp=(commandlineArguments["id"].size() != 0) ? (static_cast<int>(std::stoi(commandlineArguments["id"]))) : (m_senderStamp);
   // steering
   m_usePathMemory=(commandlineArguments["usePathMemory"].size() != 0) ? (std::stoi(commandlineArguments["usePathMemory"])==1) : (true);
+  m_useAimDistanceLapCounter=(commandlineArguments["useAimDistanceLapCounter"].size() != 0) ? (std::stoi(commandlineArguments["useAimDistanceLapCounter"])==1) : (true);
   m_staticTrustInLastPathPoint=(commandlineArguments["staticTrustInLastPathPoint"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["staticTrustInLastPathPoint"]))) : (m_staticTrustInLastPathPoint);
   m_useDynamicTrust=(commandlineArguments["useDynamicTrust"].size() != 0) ? (std::stoi(commandlineArguments["useDynamicTrust"])==1) : (false);
   m_lowTrustLimDistance=(commandlineArguments["lowTrustLimDistance"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["lowTrustLimDistance"]))) : (m_lowTrustLimDistance);
@@ -322,7 +323,9 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   Eigen::MatrixXf aimp1 = localPath.row(0) + m_aimDistance*vectorFromPath;
 
   if(m_usePathMemory && aimp1.norm() < 10){
-    m_STOP = true;
+    if(m_useAimDistanceLapCounter){
+      m_STOP = true;
+    }
     m_aimDistance = m_aimDistance + 50.0f;
     aimp1 = localPath.row(0) + m_aimDistance*vectorFromPath;
   }
