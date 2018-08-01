@@ -100,6 +100,8 @@ class Acceleration {
   bool m_accelerate;
   bool m_start;
   bool m_STOP;
+  bool m_latestPathSet;
+  Eigen::MatrixXf m_latestPath;
   std::mutex m_sendMutex;
 };
 

@@ -39,6 +39,8 @@ Acceleration::Acceleration(std::map<std::string, std::string> commandlineArgumen
   m_accelerate{false},
   m_start{true},
   m_STOP{false},
+  m_latestPathSet{false},
+  m_latestPath{},
   m_sendMutex()
 {
  setUp(commandlineArguments);
@@ -303,6 +305,18 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
     }
 
   }
+
+  if(!m_latestPathSet){
+    m_latestPath = localPath;
+    m_latestPathSet = true;
+  }
+
+  if(m_usePathMemory && abs(localPath(0,0)-localPath(1,0)) < 0.00001f && abs(localPath(0,1)-localPath(1,1)) < 0.00001f){
+    // The two first points are the same, this means that the path has been updated.
+    // Decrease the aim distance equally as much as the path has moved.
+    m_aimDistance = m_aimDistance - (localPath.row(0)-m_latestPath.row(0)).norm();
+  }
+
   Eigen::MatrixXf vectorFromPath = localPath.row(localPath.rows()-1)-localPath.row(0);
   vectorFromPath = vectorFromPath/(vectorFromPath.norm());
   Eigen::MatrixXf aimp1 = localPath.row(0) + m_aimDistance*vectorFromPath;
@@ -323,6 +337,9 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
 
   Eigen::MatrixXf vectorFromVehicle = localPath.row(localPath.rows()-1)/((localPath.row(localPath.rows()-1)).norm());
   Eigen::MatrixXf aimp2 = pathPointAimDistance*vectorFromVehicle;
+
+  m_latestPath.resize(localPath.rows(),localPath.cols());
+  m_latestPath = localPath;
 
   float trustInLastPathPoint;
   if(m_useDynamicTrust){
