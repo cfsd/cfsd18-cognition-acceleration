@@ -39,6 +39,8 @@ Acceleration::Acceleration(std::map<std::string, std::string> commandlineArgumen
   m_latestPathSet{false},
   m_latestPath{},
   m_distanceTraveled{0.0f},
+  m_groundSpeedReadingLeft{0.0f},
+  m_groundSpeedReadingRight{0.0f},
   m_sendMutex()
 {
  setUp(commandlineArguments);
@@ -50,6 +52,8 @@ Acceleration::~Acceleration()
 }
 void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments)
 {
+  m_speedId1=(commandlineArguments["speedId1"].size() != 0) ? (static_cast<uint32_t>(std::stoi(commandlineArguments["speedId1"]))) : (m_speedId1);
+  m_speedId2=(commandlineArguments["speedId2"].size() != 0) ? (static_cast<uint32_t>(std::stoi(commandlineArguments["speedId2"]))) : (m_speedId2);
   m_senderStamp=(commandlineArguments["id"].size() != 0) ? (static_cast<int>(std::stoi(commandlineArguments["id"]))) : (m_senderStamp);
   // steering
   m_usePathMemory=(commandlineArguments["usePathMemory"].size() != 0) ? (std::stoi(commandlineArguments["usePathMemory"])==1) : (true);
@@ -120,10 +124,25 @@ void Acceleration::receiveCombinedMessage(std::map<int,opendlv::logic::perceptio
 
 void Acceleration::nextContainer(cluon::data::Envelope &a_container)
 {
-  if (a_container.dataType() == opendlv::proxy::GroundSpeedReading::ID()) {
+  /*if (a_container.dataType() == opendlv::proxy::GroundSpeedReading::ID()) {
     std::unique_lock<std::mutex> lockGroundSpeed(m_groundSpeedMutex);
     auto groundSpeed = cluon::extractMessage<opendlv::proxy::GroundSpeedReading>(std::move(a_container));
     m_groundSpeed = groundSpeed.groundSpeed();
+  }*/
+  if (a_container.dataType() == opendlv::proxy::GroundSpeedReading::ID()) {
+    std::unique_lock<std::mutex> lockGroundSpeed(m_groundSpeedMutex);
+    auto vehicleSpeed = cluon::extractMessage<opendlv::proxy::GroundSpeedReading>(std::move(a_container));
+    if (m_speedId2>0) {
+      if(a_container.senderStamp()==m_speedId1){
+        m_groundSpeedReadingLeft = vehicleSpeed.groundSpeed();
+      } else if (a_container.senderStamp()==m_speedId2){
+        m_groundSpeedReadingRight = vehicleSpeed.groundSpeed();
+      }
+      m_groundSpeed = (m_groundSpeedReadingLeft + m_groundSpeedReadingRight)*0.5f;
+    }
+    else {
+      m_groundSpeed = vehicleSpeed.groundSpeed();
+    }
   }
   else if (a_container.dataType() == opendlv::logic::perception::GroundSurfaceProperty::ID()) {
     m_STOP = true;

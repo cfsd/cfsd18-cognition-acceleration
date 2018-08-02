@@ -49,6 +49,8 @@ class Acceleration {
   /* commandlineArguments */
   cluon::OD4Session &m_od4;
   cluon::OD4Session m_od4BB{219};
+  uint32_t m_speedId1{1504};
+  uint32_t m_speedId2{0};
   int m_senderStamp{221};
   // steering
   bool m_usePathMemory{};
@@ -95,6 +97,8 @@ class Acceleration {
   bool m_latestPathSet;
   Eigen::MatrixXf m_latestPath;
   float m_distanceTraveled;
+  float m_groundSpeedReadingLeft;
+  float m_groundSpeedReadingRight;
   std::mutex m_sendMutex;
 };
 
