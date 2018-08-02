@@ -43,11 +43,12 @@ class Acceleration {
   void run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleTime);
   Eigen::MatrixXf orderCones(Eigen::MatrixXf localPath);
   void Cartesian2Spherical(float, float, float, opendlv::logic::sensation::Point &);
-  std::tuple<float, float> driverModelSteering(Eigen::MatrixXf);
-  float driverModelVelocity(float, float);
+  std::tuple<float, float> driverModelSteering(Eigen::MatrixXf, float);
+  float driverModelVelocity(float);
 
   /* commandlineArguments */
   cluon::OD4Session &m_od4;
+  cluon::OD4Session m_od4BB{219};
   int m_senderStamp{221};
   // steering
   bool m_usePathMemory{};
@@ -61,35 +62,26 @@ class Acceleration {
   float m_aimDistance{50.0f};
   bool m_moveOrigin{true};
   float m_steerRate{50.0f};
+  float m_prevReqRatio{0.0f};
   // velocity control
-  bool m_useAyReading{false};
-  float m_velocityLimit{5.0f};
-  float m_mu{0.9f};
+  float m_velocityLimit{20.0f};
   float m_axLimitPositive{5.0f};
   float m_axLimitNegative{-5.0f};
-  float m_headingErrorDependency{0.7f};
   //....controller
-  float m_aimVel{5.0f};
-  float m_aKp{0.1f};
+  float m_aKp{1.0f};
   float m_aKd{0.0f};
-  float m_aKi{0.0f};
-  float m_bKp{0.1f};
+  float m_aKi{0.1f};
+  float m_bKp{1.0f};
   float m_bKd{0.0f};
-  float m_bKi{0.0f};
-  float m_sKp{0.1f};
-  float m_sKd{0.0f};
-  float m_sKi{0.0f};
+  float m_bKi{0.1f};
   // vehicle specific
-  float m_wheelAngleLimit{20.0f};
-  float m_wheelBase{1.53f};
+  float m_wheelAngleLimit{30.0f};
   float m_frontToCog{0.765f};
 
   /* Member variables */
   float const m_PI = 3.14159265f;
   float m_groundSpeed;
   std::mutex m_groundSpeedMutex;
-  float m_lateralAcceleration;
-  std::mutex m_lateralAccelerationMutex;
   std::chrono::time_point<std::chrono::system_clock> m_tickDt;
   std::chrono::time_point<std::chrono::system_clock> m_tockDt;
   std::chrono::time_point<std::chrono::system_clock> m_steerTickDt;
@@ -99,10 +91,10 @@ class Acceleration {
   bool m_changeState;
   float m_prevHeadingRequest;
   bool m_accelerate;
-  bool m_start;
   bool m_STOP;
   bool m_latestPathSet;
   Eigen::MatrixXf m_latestPath;
+  float m_distanceTraveled;
   std::mutex m_sendMutex;
 };
 

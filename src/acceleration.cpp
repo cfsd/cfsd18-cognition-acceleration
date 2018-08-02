@@ -26,8 +26,6 @@ Acceleration::Acceleration(std::map<std::string, std::string> commandlineArgumen
   m_od4(od4),
   m_groundSpeed{0.0f},
   m_groundSpeedMutex{},
-  m_lateralAcceleration{0.0f},
-  m_lateralAccelerationMutex{},
   m_tickDt{},
   m_tockDt{},
   m_steerTickDt{},
@@ -36,11 +34,11 @@ Acceleration::Acceleration(std::map<std::string, std::string> commandlineArgumen
   m_ePrev{0.0f},
   m_changeState{true},
   m_prevHeadingRequest{0.0f},
-  m_accelerate{false},
-  m_start{true},
+  m_accelerate{true},
   m_STOP{false},
   m_latestPathSet{false},
   m_latestPath{},
+  m_distanceTraveled{0.0f},
   m_sendMutex()
 {
  setUp(commandlineArguments);
@@ -65,29 +63,21 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
   m_aimDistance=(commandlineArguments["aimDistance"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aimDistance"]))) : (m_aimDistance);
   m_moveOrigin=(commandlineArguments["useMoveOrigin"].size() != 0) ? (std::stoi(commandlineArguments["useMoveOrigin"])==1) : (true);
   m_steerRate=(commandlineArguments["steerRate"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["steerRate"]))) : (m_steerRate);
-
+  m_prevReqRatio=(commandlineArguments["prevReqRatio"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["prevReqRatio"]))) : (m_prevReqRatio);
   // velocity control
-  m_useAyReading=(commandlineArguments["useAyReading"].size() != 0) ? (std::stoi(commandlineArguments["useAyReading"])==1) : (true);
   m_velocityLimit=(commandlineArguments["velocityLimit"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["velocityLimit"]))) : (m_velocityLimit);
-  m_mu=(commandlineArguments["mu"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["mu"]))) : (m_mu);
   m_axLimitPositive=(commandlineArguments["axLimitPositive"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["axLimitPositive"]))) : (m_axLimitPositive);
   m_axLimitNegative=(commandlineArguments["axLimitNegative"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["axLimitNegative"]))) : (m_axLimitNegative);
-  m_headingErrorDependency=(commandlineArguments["headingErrorDependency"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["headingErrorDependency"]))) : (m_headingErrorDependency);
   // ....controller
-  m_aimVel=(commandlineArguments["startAimVel"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["startAimVel"]))) : (m_aimVel);
   m_aKp=(commandlineArguments["aKp"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aKp"]))) : (m_aKp);
   m_aKd=(commandlineArguments["aKd"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aKd"]))) : (m_aKd);
   m_aKi=(commandlineArguments["aKi"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aKi"]))) : (m_aKi);
   m_bKp=(commandlineArguments["bKp"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["bKp"]))) : (m_bKp);
   m_bKd=(commandlineArguments["bKd"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["bKd"]))) : (m_bKd);
   m_bKi=(commandlineArguments["bKi"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["bKi"]))) : (m_bKi);
-  m_sKp=(commandlineArguments["sKp"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["sKp"]))) : (m_sKp);
-  m_sKd=(commandlineArguments["sKd"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["sKd"]))) : (m_sKd);
-  m_sKi=(commandlineArguments["sKi"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["sKi"]))) : (m_sKi);
 
   // vehicle specific
   m_wheelAngleLimit=(commandlineArguments["wheelAngleLimit"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["wheelAngleLimit"]))) : (m_wheelAngleLimit);
-  m_wheelBase=(commandlineArguments["wheelBase"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["wheelBase"]))) : (m_wheelBase);
   m_frontToCog=(commandlineArguments["frontToCog"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["frontToCog"]))) : (m_frontToCog);
 
   /*//std::cout<<"Acceleration set up with "<<commandlineArguments.size()<<" commandlineArguments: "<<std::endl;
@@ -152,14 +142,7 @@ void Acceleration::run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleT
     groundSpeedCopy = m_groundSpeed;
   }
 
-  if (localPath.rows()>2 && (std::abs(localPath(localPath.rows()-1,0))<=0.00001f && std::abs(localPath(localPath.rows()-2,0))<=0.00001f && std::abs(localPath(localPath.rows()-1,1))<=0.00001f && std::abs(localPath(localPath.rows()-2,1))<=0.00001f)){
-    //std::cout<<"stop signal: "<<localPath<<std::endl;
-    Eigen::MatrixXf localPathTmp = localPath.topRows(localPath.rows()-2);
-    localPath.resize(localPathTmp.rows(),2);
-    localPath = localPathTmp;
-    m_STOP = true;
-  }
-  else if (localPath.rows()>2) {
+  if (localPath.rows()>2) {
     if(!m_usePathMemory){
       // Order path
       localPath = orderCones(localPath);
@@ -181,7 +164,7 @@ void Acceleration::run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleT
         localPath = localPathTmp;
       }
       if (localPath.rows()>=2) {
-        auto steering = Acceleration::driverModelSteering(localPath);
+        auto steering = Acceleration::driverModelSteering(localPath, groundSpeedCopy);
         headingRequest = std::get<0>(steering);
         distanceToAimPoint = std::get<1>(steering);
       }
@@ -195,7 +178,7 @@ void Acceleration::run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleT
     headingRequest=m_prevHeadingRequest;
     distanceToAimPoint=1.0f;
   }
-  accelerationRequest = Acceleration::driverModelVelocity(groundSpeedCopy, headingRequest);
+  accelerationRequest = Acceleration::driverModelVelocity(groundSpeedCopy);
 
   { /*---SEND---*/
     std::unique_lock<std::mutex> lockSend(m_sendMutex);
@@ -215,6 +198,11 @@ void Acceleration::run(Eigen::MatrixXf localPath, cluon::data::TimeStamp sampleT
       m_od4.send(dec, sampleTime, m_senderStamp);
     }
   } //end mutex scope
+  if(m_STOP && groundSpeedCopy<0.1f){ //TODO: make sure it works
+    opendlv::proxy::SwitchStateReading message;
+    message.state(1);
+    m_od4BB.send(message,sampleTime, 1403);
+  }
 }//end run
 
 
@@ -276,7 +264,7 @@ void Acceleration::Cartesian2Spherical(float x, float y, float z, opendlv::logic
 } // End of Cartesian2Spherical
 
 
-std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf localPath) {
+std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf localPath, float groundSpeedCopy) {
   float headingRequest = 0.0f;
   float distanceToAimPoint = 0.0f;
   bool noPath = false;
@@ -311,11 +299,17 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
     m_latestPath = localPath;
     m_latestPathSet = true;
   }
+  m_steerTockDt = std::chrono::system_clock::now();
+  std::chrono::duration<float> DT = m_steerTockDt-m_steerTickDt;
+  m_steerTickDt = std::chrono::system_clock::now();
+  float dt = (DT.count()<1.0f) ? (DT.count()) : (0.1f); // Avoid large DT's to give high control outputs
+  m_distanceTraveled+=groundSpeedCopy*dt;
 
   if(m_usePathMemory && abs(localPath(0,0)-localPath(1,0)) < 0.00001f && abs(localPath(0,1)-localPath(1,1)) < 0.00001f){
     // The two first points are the same, this means that the path has been updated.
     // Decrease the aim distance equally as much as the path has moved.
-    m_aimDistance = m_aimDistance - (localPath.row(0)-m_latestPath.row(0)).norm();
+    m_aimDistance = m_aimDistance - m_distanceTraveled; //(localPath.row(0)-m_latestPath.row(0)).norm();
+    m_distanceTraveled=0.0f;
   }
 
   Eigen::MatrixXf vectorFromPath = localPath.row(localPath.rows()-1)-localPath.row(0);
@@ -375,10 +369,10 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   } else {
     headingRequest = std::max(headingRequest,-m_wheelAngleLimit*m_PI/180.0f);
   }
+  if (m_prevReqRatio > 0.0f) {
+    headingRequest = m_prevReqRatio*m_prevHeadingRequest + (1.0f-m_prevReqRatio)*headingRequest;
+  }
 
-  m_steerTockDt = std::chrono::system_clock::now();
-  std::chrono::duration<float> DT = m_steerTockDt-m_steerTickDt;
-  float dt = (DT.count()<1.0f) ? (DT.count()) : (0.1f); // Avoid large DT's to give high control outputs
   if (std::abs(headingRequest-m_prevHeadingRequest)/dt>(m_steerRate*m_PI/180.0)){
     if (headingRequest > m_prevHeadingRequest) {
       headingRequest = dt*m_steerRate*m_PI/180.0f + m_prevHeadingRequest;
@@ -388,26 +382,17 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
     }
   }
   m_prevHeadingRequest=headingRequest;
-  m_steerTickDt = std::chrono::system_clock::now();
 
 
   return std::make_tuple(headingRequest,distanceToAimPoint);
 }
 
 
-float Acceleration::driverModelVelocity(float groundSpeedCopy, float headingRequest){
-  if (headingRequest>0) {
-  }
+float Acceleration::driverModelVelocity(float groundSpeedCopy){
   float accelerationRequest=0.0f;
   m_tockDt = std::chrono::system_clock::now();
   std::chrono::duration<float> DT = m_tockDt-m_tickDt;
   float dt = (DT.count()<1.0f) ? (DT.count()) : (0.1f); // Avoid large DT's to give high control outputs
-  if (std::abs(m_ei)>1000.0f) { //Avoid unreasonable integral parts of PID to damage the system
-    if (m_ei>0)
-      m_ei = 1000.0f;
-    else
-      m_ei =-1000.0f;
-  }
   float e = 0.0f;
   float ed = 0.0f;
   if (m_STOP && m_accelerate) {
@@ -422,7 +407,13 @@ float Acceleration::driverModelVelocity(float groundSpeedCopy, float headingRequ
   }
   if (m_accelerate){
     e = m_velocityLimit-groundSpeedCopy;
-    m_ei += e*dt;
+    if (groundSpeedCopy<=0.0f) {
+      m_ei=0.0f;
+    }
+    else{
+      m_ei += e*dt;
+    }
+    m_ei=std::min(m_ei,m_axLimitPositive/m_aKi);
     ed = (e-m_ePrev)/dt;
     m_ePrev=e;
     float accTmp = m_aKp*e+m_aKd*ed+m_aKi*m_ei;
@@ -430,33 +421,18 @@ float Acceleration::driverModelVelocity(float groundSpeedCopy, float headingRequ
     if (accTmp<0) {
       accelerationRequest=-accelerationRequest;
     }
-    //std::cout<<"Acceleration: "<<accelerationRequest<<" aim: "<<m_velocityLimit<<" speed: "<<groundSpeedCopy<<std::endl;
   }
   else if (m_STOP) {
     e = 0.0f-groundSpeedCopy;
     m_ei += e*dt;
+    m_ei=std::max(m_ei,m_axLimitNegative/m_bKi);
     ed = (e-m_ePrev)/dt;
     m_ePrev=e;
     float accTmp = m_bKp*e+m_bKd*ed+m_bKi*m_ei;
     accelerationRequest = std::max(accTmp,m_axLimitNegative);
-    //std::cout<<"STOP: "<<accelerationRequest<<" aim: "<<0.0<<" speed: "<<groundSpeedCopy<<std::endl;
-  }
-  else if (m_start) {
-    e = m_aimVel-groundSpeedCopy;
-    m_ei += e*dt;
-    ed = (e-m_ePrev)/dt;
-    m_ePrev=e;
-    float accTmp = m_sKp*e+m_sKd*ed+m_sKi*m_ei;
-    accelerationRequest = std::min(std::abs(accTmp),m_axLimitPositive);
-    if (accTmp<0) {
-      accelerationRequest=-accelerationRequest;
+    if (accelerationRequest>0.0f) {
+      accelerationRequest=0.0f;
     }
-    if (groundSpeedCopy > m_aimVel) {
-      m_start = false;
-      m_accelerate = true;
-      m_changeState=true;
-    }
-    //std::cout<<"Start: "<<accelerationRequest<<" aim: "<<m_aimVel<<" speed: "<<groundSpeedCopy<<std::endl;
   }
   m_tickDt = std::chrono::system_clock::now();
   return accelerationRequest;
