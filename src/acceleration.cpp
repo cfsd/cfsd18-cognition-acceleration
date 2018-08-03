@@ -41,6 +41,12 @@ Acceleration::Acceleration(std::map<std::string, std::string> commandlineArgumen
   m_distanceTraveled{0.0f},
   m_groundSpeedReadingLeft{0.0f},
   m_groundSpeedReadingRight{0.0f},
+  m_yawMutex{},
+  m_yawRate{0.0f},
+  m_sEPrev{0.0f},
+  m_sEi{0.0f},
+  m_aimClock{true},
+  m_prevAngleToAimPoint{0.0f},
   m_sendMutex()
 {
  setUp(commandlineArguments);
@@ -68,6 +74,11 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
   m_moveOrigin=(commandlineArguments["useMoveOrigin"].size() != 0) ? (std::stoi(commandlineArguments["useMoveOrigin"])==1) : (true);
   m_steerRate=(commandlineArguments["steerRate"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["steerRate"]))) : (m_steerRate);
   m_prevReqRatio=(commandlineArguments["prevReqRatio"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["prevReqRatio"]))) : (m_prevReqRatio);
+  m_aimRate=(commandlineArguments["aimRate"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aimRate"]))) : (m_aimRate);
+  m_aimFreq=(commandlineArguments["aimFreq"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aimFreq"]))) : (m_aimFreq);
+  m_prevAimReqRatio=(commandlineArguments["prevAimReqRatio"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["prevAimReqRatio"]))) : (m_prevAimReqRatio);
+  m_useYawRate=(commandlineArguments["useYawRate"].size() != 0) ? (std::stoi(commandlineArguments["useYawRate"])==1) : (m_useYawRate);
+  m_lowPassfactor=(commandlineArguments["lowPassfactor"].size() != 0) ? (static_cast<int>(std::stoi(commandlineArguments["lowPassfactor"]))) : (m_lowPassfactor);
   // velocity control
   m_velocityLimit=(commandlineArguments["velocityLimit"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["velocityLimit"]))) : (m_velocityLimit);
   m_axLimitPositive=(commandlineArguments["axLimitPositive"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["axLimitPositive"]))) : (m_axLimitPositive);
@@ -79,6 +90,9 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
   m_bKp=(commandlineArguments["bKp"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["bKp"]))) : (m_bKp);
   m_bKd=(commandlineArguments["bKd"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["bKd"]))) : (m_bKd);
   m_bKi=(commandlineArguments["bKi"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["bKi"]))) : (m_bKi);
+  m_sKp=(commandlineArguments["sKp"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["sKp"]))) : (m_sKp);
+  m_sKd=(commandlineArguments["sKd"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["sKd"]))) : (m_sKd);
+  m_sKi=(commandlineArguments["sKi"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["sKi"]))) : (m_sKi);
 
   // vehicle specific
   m_wheelAngleLimit=(commandlineArguments["wheelAngleLimit"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["wheelAngleLimit"]))) : (m_wheelAngleLimit);
@@ -143,6 +157,11 @@ void Acceleration::nextContainer(cluon::data::Envelope &a_container)
     else {
       m_groundSpeed = vehicleSpeed.groundSpeed();
     }
+  }
+  if (a_container.dataType() == opendlv::proxy::AngularVelocityReading::ID()) {
+    std::lock_guard<std::mutex> lockYaw(m_yawMutex);
+    auto yawRate = cluon::extractMessage<opendlv::proxy::AngularVelocityReading>(std::move(a_container));
+    m_yawRate = yawRate.angularVelocityZ();
   }
   else if (a_container.dataType() == opendlv::logic::perception::GroundSurfaceProperty::ID()) {
     m_STOP = true;
@@ -286,6 +305,7 @@ void Acceleration::Cartesian2Spherical(float x, float y, float z, opendlv::logic
 std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf localPath, float groundSpeedCopy) {
   float headingRequest = 0.0f;
   float distanceToAimPoint = 0.0f;
+  float angleToAimPoint = 0.0f;
   bool noPath = false;
   if (m_moveOrigin) {
     // Move localPath to front wheel axis
@@ -379,9 +399,45 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   Eigen::MatrixXf combinedAimPoint = aimp1 + trustInLastPathPoint*(aimp2 - aimp1);
   opendlv::logic::sensation::Point sphericalPoint;
   Cartesian2Spherical(combinedAimPoint(0,0), combinedAimPoint(0,1), 0, sphericalPoint);
-  headingRequest = sphericalPoint.azimuthAngle();
   distanceToAimPoint = sphericalPoint.distance();
+  m_aimClock+=DT.count();
+  if (m_aimClock>(1.0f/m_aimFreq)) {
+    m_aimClock = 0.0f;
+    angleToAimPoint = sphericalPoint.azimuthAngle();
+    //std::cout<<"angleToAimPoint: "<<angleToAimPoint<<std::endl;
+    m_sEi = 0.0f;
+  }
+  else{
+    angleToAimPoint=m_prevAngleToAimPoint;
+  }
 
+  if (std::abs(angleToAimPoint-m_prevAngleToAimPoint)/dt>(m_aimRate*m_PI/180.0)){
+    if (angleToAimPoint > m_prevAngleToAimPoint) {
+      angleToAimPoint = dt*m_aimRate*m_PI/180.0f + m_prevAngleToAimPoint;
+    }
+    else{
+      angleToAimPoint = -dt*m_aimRate*m_PI/180.0f + m_prevAngleToAimPoint;
+    }
+  }
+  if (m_prevAimReqRatio > 0.0f) {
+    angleToAimPoint = m_prevAimReqRatio*m_prevAngleToAimPoint + (1.0f-m_prevAimReqRatio)*angleToAimPoint;
+  }
+  if (m_lowPassfactor>0) {
+    angleToAimPoint = lowPass(m_lowPassfactor, m_prevAngleToAimPoint, angleToAimPoint);
+  }
+
+  float e = angleToAimPoint;
+  float ed=0.0f;
+  if (m_useYawRate) {
+    ed = m_yawRate;
+  }
+  else {
+    ed = (e-m_sEPrev)/dt;
+  }
+  m_sEi+=e*dt;
+  headingRequest = e*m_sKp+ed*m_sKd+m_sEi*m_sKi;
+  //std::cout<<"e: "<<e<<" yawRate: "<<m_yawRate<<" ed: "<<(e-m_sEPrev)/dt<<" headingRequest: "<<headingRequest<<std::endl;
+  m_sEPrev=e;
   // Limit heading request due to physical limitations
   if (headingRequest>=0) {
     headingRequest = std::min(headingRequest,m_wheelAngleLimit*m_PI/180.0f);
@@ -400,8 +456,8 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
       headingRequest = -dt*m_steerRate*m_PI/180.0f + m_prevHeadingRequest;
     }
   }
+  m_prevAngleToAimPoint = angleToAimPoint;
   m_prevHeadingRequest=headingRequest;
-
 
   return std::make_tuple(headingRequest,distanceToAimPoint);
 }
@@ -455,4 +511,9 @@ float Acceleration::driverModelVelocity(float groundSpeedCopy){
   }
   m_tickDt = std::chrono::system_clock::now();
   return accelerationRequest;
+}
+
+float Acceleration::lowPass(int factor, float lastOutput, float presentReading)
+{
+  return (factor * lastOutput + presentReading) / (factor+1);
 }

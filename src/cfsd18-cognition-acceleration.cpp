@@ -39,6 +39,7 @@ int32_t main(int32_t argc, char **argv) {
     uint32_t const surfaceId=(commandlineArguments["surfaceId"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["surfaceId"])) : (0);
     uint32_t const speedId1=(commandlineArguments["speedId1"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["speedId1"])) : (0);
     uint32_t const speedId2=(commandlineArguments["speedId2"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["speedId2"])) : (0);
+    uint32_t const yawRateId=(commandlineArguments["yawRateId"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["yawRateId"])) : (0);
     uint32_t id = (commandlineArguments.count("id")>0)?(static_cast<uint32_t>(std::stoi(commandlineArguments["id"]))):(221);
     uint16_t const cidWheelSpeed{(commandlineArguments["cidWheelSpeed"].size() != 0) ? static_cast<uint16_t>(std::stoi(commandlineArguments["cidWheelSpeed"])) : (uint16_t) 219};
     // Interface to a running OpenDaVINCI session
@@ -57,9 +58,9 @@ int32_t main(int32_t argc, char **argv) {
         }
       }
     };
-    auto nextEnvelope{[&surfer = acceleration, speedId1, speedId2, surfaceId](cluon::data::Envelope &&envelope)
+    auto nextEnvelope{[&surfer = acceleration, speedId1, speedId2, surfaceId, yawRateId](cluon::data::Envelope &&envelope)
       {
-        if(envelope.senderStamp() == speedId1 || envelope.senderStamp() == speedId2 || envelope.senderStamp() == surfaceId){
+        if(envelope.senderStamp() == speedId1 || envelope.senderStamp() == speedId2 || envelope.senderStamp() == surfaceId || envelope.senderStamp() == yawRateId){
           surfer.nextContainer(envelope);
         }
       }
@@ -69,6 +70,7 @@ int32_t main(int32_t argc, char **argv) {
     od4.dataTrigger(opendlv::logic::perception::GroundSurfaceArea::ID(),surfaceEnvelope);
     od4.dataTrigger(opendlv::logic::perception::GroundSurfaceProperty::ID(),nextEnvelope);
     od4.dataTrigger(opendlv::proxy::GroundSpeedReading::ID(),nextEnvelope);
+    od4.dataTrigger(opendlv::proxy::AngularVelocityReading::ID(),nextEnvelope);
 
 
     // Just sleep as this microservice is data driven.

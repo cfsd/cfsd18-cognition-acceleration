@@ -45,6 +45,7 @@ class Acceleration {
   void Cartesian2Spherical(float, float, float, opendlv::logic::sensation::Point &);
   std::tuple<float, float> driverModelSteering(Eigen::MatrixXf, float);
   float driverModelVelocity(float);
+  float lowPass(int factor, float lastOutput, float presentReading);
 
   /* commandlineArguments */
   cluon::OD4Session &m_od4;
@@ -65,6 +66,11 @@ class Acceleration {
   bool m_moveOrigin{true};
   float m_steerRate{50.0f};
   float m_prevReqRatio{0.0f};
+  float m_aimRate{100.0f};
+  float m_aimFreq{1000.0f};
+  float m_prevAimReqRatio{0.0f};
+  bool m_useYawRate{true};
+  int m_lowPassfactor{0};
   // velocity control
   float m_velocityLimit{20.0f};
   float m_axLimitPositive{5.0f};
@@ -76,6 +82,9 @@ class Acceleration {
   float m_bKp{1.0f};
   float m_bKd{0.0f};
   float m_bKi{0.1f};
+  float m_sKp{1.0f};
+  float m_sKd{0.2f};
+  float m_sKi{0.0f};
   // vehicle specific
   float m_wheelAngleLimit{30.0f};
   float m_frontToCog{0.765f};
@@ -99,6 +108,12 @@ class Acceleration {
   float m_distanceTraveled;
   float m_groundSpeedReadingLeft;
   float m_groundSpeedReadingRight;
+  std::mutex m_yawMutex;
+  float m_yawRate;
+  float m_sEPrev;
+  float m_sEi;
+  float m_aimClock;
+  float m_prevAngleToAimPoint;
   std::mutex m_sendMutex;
 };
 
