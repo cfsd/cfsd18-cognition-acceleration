@@ -405,7 +405,6 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
     m_aimClock = 0.0f;
     angleToAimPoint = sphericalPoint.azimuthAngle();
     //std::cout<<"angleToAimPoint: "<<angleToAimPoint<<std::endl;
-    m_sEi = 0.0f;
   }
   else{
     angleToAimPoint=m_prevAngleToAimPoint;
@@ -434,7 +433,12 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   else {
     ed = (e-m_sEPrev)/dt;
   }
-  m_sEi+=e*dt;
+  if (groundSpeedCopy<=0.0f) {
+    m_sEi=0.0f;
+  }
+  else{
+    m_sEi+=e*dt;
+  }
   headingRequest = e*m_sKp+ed*m_sKd+m_sEi*m_sKi;
   //std::cout<<"e: "<<e<<" yawRate: "<<m_yawRate<<" ed: "<<(e-m_sEPrev)/dt<<" headingRequest: "<<headingRequest<<std::endl;
   m_sEPrev=e;
