@@ -66,6 +66,7 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
   m_senderStamp=(commandlineArguments["id"].size() != 0) ? (static_cast<int>(std::stoi(commandlineArguments["id"]))) : (m_senderStamp);
   // steering
   m_correctionCooldown=(commandlineArguments["correctionCooldown"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["correctionCooldown"]))) : (m_correctionCooldown);
+  m_aimDeltaLimit=(commandlineArguments["aimDeltaLimit"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["aimDeltaLimit"]))) : (m_aimDeltaLimit);
   m_k=(commandlineArguments["k"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["k"]))) : (m_k);
   m_useSteerRateControl=(commandlineArguments["useSteerRateControl"].size() != 0) ? (std::stoi(commandlineArguments["useSteerRateControl"])==1) : (false);
   m_usePathMemory=(commandlineArguments["usePathMemory"].size() != 0) ? (std::stoi(commandlineArguments["usePathMemory"])==1) : (true);
@@ -435,17 +436,28 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   float ed=0.0f;
   float steeringDelta = 0.0f;
   if (m_useSteerRateControl) {
-    m_aimPointRate += (angleToAimPoint - m_prevAngleToAimPoint) / DT.count();
-    m_rateCount+=1;
-    m_timeSinceLastCorrection += DT.count();
-    std::cout<<"m_aimPointRate sum: "<<m_aimPointRate<<" m_rateCount: "<<m_rateCount<<" m_timeSinceLastCorrection "<< m_timeSinceLastCorrection<<std::endl;
-    if (m_timeSinceLastCorrection > m_correctionCooldown){
+    if (std::abs(angleToAimPoint-m_prevAngleToAimPoint)<m_aimDeltaLimit) {
+      m_aimPointRate += (angleToAimPoint - m_prevAngleToAimPoint) / DT.count();
+      m_rateCount+=1;
+      m_timeSinceLastCorrection += DT.count();
+      std::cout<<"m_aimPointRate sum: "<<m_aimPointRate<<" m_rateCount: "<<m_rateCount<<" m_timeSinceLastCorrection "<< m_timeSinceLastCorrection<<std::endl;
+      if (m_timeSinceLastCorrection > m_correctionCooldown){
+        m_aimPointRate=m_aimPointRate/m_rateCount;
+        steeringDelta = m_k * m_aimPointRate;
+        headingRequest = m_prevHeadingRequest + steeringDelta;
+        std::cout<<"---- headingRequest" <<headingRequest<< "m_aimPointRate: "<<m_aimPointRate<<" steeringDelta: "<<steeringDelta<<std::endl;
+        m_rateCount=0;
+        m_timeSinceLastCorrection=0.0f;
+        m_aimPointRate=0.0f;
+      }
+    }
+    else {
       m_aimPointRate=m_aimPointRate/m_rateCount;
       steeringDelta = m_k * m_aimPointRate;
-      m_rateCount=0;
-      m_timeSinceLastCorrection=0.0f;
       headingRequest = m_prevHeadingRequest + steeringDelta;
-      std::cout<<"---- headingRequest" <<headingRequest<< "m_aimPointRate: "<<m_aimPointRate<<" steeringDelta: "<<steeringDelta<<std::endl;
+      m_rateCount = 0;
+      m_timeSinceLastCorrection = 0.0f;
+      m_aimPointRate =0.0f;
     }
   }
   else {

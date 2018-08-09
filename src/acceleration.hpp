@@ -55,6 +55,7 @@ class Acceleration {
   int m_senderStamp{221};
   // steering
   float m_correctionCooldown{0.3f};
+  float m_aimDeltaLimit{3.0f};
   float m_k{2.0f};
   bool m_useSteerRateControl{};
   bool m_usePathMemory{};
