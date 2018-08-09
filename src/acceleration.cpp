@@ -47,6 +47,9 @@ Acceleration::Acceleration(std::map<std::string, std::string> commandlineArgumen
   m_sEi{0.0f},
   m_aimClock{true},
   m_prevAngleToAimPoint{0.0f},
+  m_aimPointRate{0.0f},
+  m_rateCount{0},
+  m_timeSinceLastCorrection{0.0f},
   m_sendMutex()
 {
  setUp(commandlineArguments);
@@ -62,6 +65,9 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
   m_speedId2=(commandlineArguments["speedId2"].size() != 0) ? (static_cast<uint32_t>(std::stoi(commandlineArguments["speedId2"]))) : (m_speedId2);
   m_senderStamp=(commandlineArguments["id"].size() != 0) ? (static_cast<int>(std::stoi(commandlineArguments["id"]))) : (m_senderStamp);
   // steering
+  m_correctionCooldown=(commandlineArguments["correctionCooldown"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["correctionCooldown"]))) : (m_correctionCooldown);
+  m_k=(commandlineArguments["k"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["k"]))) : (m_k);
+  m_useSteerRateControl=(commandlineArguments["useSteerRateControl"].size() != 0) ? (std::stoi(commandlineArguments["useSteerRateControl"])==1) : (false);
   m_usePathMemory=(commandlineArguments["usePathMemory"].size() != 0) ? (std::stoi(commandlineArguments["usePathMemory"])==1) : (true);
   m_useAimDistanceLapCounter=(commandlineArguments["useAimDistanceLapCounter"].size() != 0) ? (std::stoi(commandlineArguments["useAimDistanceLapCounter"])==1) : (true);
   m_staticTrustInLastPathPoint=(commandlineArguments["staticTrustInLastPathPoint"].size() != 0) ? (static_cast<float>(std::stof(commandlineArguments["staticTrustInLastPathPoint"]))) : (m_staticTrustInLastPathPoint);
@@ -427,21 +433,39 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
 
   float e = angleToAimPoint;
   float ed=0.0f;
-  if (m_useYawRate) {
-    ed = m_yawRate;
+  float steeringDelta = 0.0f;
+  if (m_useSteerRateControl) {
+    m_aimPointRate += (angleToAimPoint - m_prevAngleToAimPoint) / DT.count();
+    m_rateCount+=1;
+    m_timeSinceLastCorrection += DT.count();
+    std::cout<<"m_aimPointRate sum: "<<m_aimPointRate<<" m_rateCount: "<<m_rateCount<<" m_timeSinceLastCorrection "<< m_timeSinceLastCorrection<<std::endl;
+    if (m_timeSinceLastCorrection > m_correctionCooldown){
+      m_aimPointRate=m_aimPointRate/m_rateCount;
+      steeringDelta = m_k * m_aimPointRate;
+      m_rateCount=0;
+      m_timeSinceLastCorrection=0.0f;
+      headingRequest = m_prevHeadingRequest + steeringDelta;
+      std::cout<<"---- headingRequest" <<headingRequest<< "m_aimPointRate: "<<m_aimPointRate<<" steeringDelta: "<<steeringDelta<<std::endl;
+    }
   }
   else {
-    ed = (e-m_sEPrev)/dt;
+    if (m_useYawRate) {
+      ed = m_yawRate;
+    }
+    else {
+      ed = (e-m_sEPrev)/dt;
+    }
+    if (groundSpeedCopy<=0.0f) {
+      m_sEi=0.0f;
+    }
+    else{
+      m_sEi+=e*dt;
+    }
+    headingRequest = e*m_sKp+ed*m_sKd+m_sEi*m_sKi;
+    //std::cout<<"e: "<<e<<" yawRate: "<<m_yawRate<<" ed: "<<(e-m_sEPrev)/dt<<" headingRequest: "<<headingRequest<<std::endl;
+    m_sEPrev=e;
   }
-  if (groundSpeedCopy<=0.0f) {
-    m_sEi=0.0f;
-  }
-  else{
-    m_sEi+=e*dt;
-  }
-  headingRequest = e*m_sKp+ed*m_sKd+m_sEi*m_sKi;
-  //std::cout<<"e: "<<e<<" yawRate: "<<m_yawRate<<" ed: "<<(e-m_sEPrev)/dt<<" headingRequest: "<<headingRequest<<std::endl;
-  m_sEPrev=e;
+
   // Limit heading request due to physical limitations
   if (headingRequest>=0) {
     headingRequest = std::min(headingRequest,m_wheelAngleLimit*m_PI/180.0f);
