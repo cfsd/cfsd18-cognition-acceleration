@@ -114,6 +114,8 @@ class Acceleration {
   float m_sEi;
   float m_aimClock;
   float m_prevAngleToAimPoint;
+  float m_fullTime;
+  std::string folderName;
   std::mutex m_sendMutex;
 };
 

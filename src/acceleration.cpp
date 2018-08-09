@@ -47,6 +47,8 @@ Acceleration::Acceleration(std::map<std::string, std::string> commandlineArgumen
   m_sEi{0.0f},
   m_aimClock{true},
   m_prevAngleToAimPoint{0.0f},
+  m_fullTime{0.0f},
+  folderName{},
   m_sendMutex()
 {
  setUp(commandlineArguments);
@@ -102,6 +104,34 @@ void Acceleration::setUp(std::map<std::string, std::string> commandlineArguments
   for (std::map<std::string, std::string >::iterator it = commandlineArguments.begin();it !=commandlineArguments.end();it++){
     //std::cout<<it->first<<" "<<it->second<<std::endl;
   }*/
+  std::stringstream currentDateTime;
+       time_t ttNow = time(0);
+       tm * ptmNow;
+       ptmNow = localtime(&ttNow);
+       currentDateTime << 1900 + ptmNow->tm_year << "-";
+       if (ptmNow->tm_mon < 9)
+           currentDateTime << "0" << 1 + ptmNow->tm_mon << "-";
+       else
+           currentDateTime << (1 + ptmNow->tm_mon) << "-";
+       if (ptmNow->tm_mday < 10)
+           currentDateTime << "0" << ptmNow->tm_mday << "_";
+       else
+           currentDateTime <<  ptmNow->tm_mday << "_";
+       if (ptmNow->tm_hour < 10)
+           currentDateTime << "0" << ptmNow->tm_hour;
+       else
+           currentDateTime << ptmNow->tm_hour;
+       if (ptmNow->tm_min < 10)
+           currentDateTime << "0" << ptmNow->tm_min;
+       else
+           currentDateTime << ptmNow->tm_min;
+       if (ptmNow->tm_sec < 10)
+           currentDateTime << "0" << ptmNow->tm_sec;
+       else
+           currentDateTime << ptmNow->tm_sec;
+  folderName="/opt/opendlv.data/"+currentDateTime.str()+"_steeringLogs";
+  std::string command = "mkdir "+folderName;
+  system(command.c_str());
 }
 
 void Acceleration::tearDown()
@@ -432,6 +462,7 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   }
   else {
     ed = (e-m_sEPrev)/dt;
+    //ed = lowPass(m_lowPassfactor, m_sEPrev, ed);
   }
   if (groundSpeedCopy<=0.0f) {
     m_sEi=0.0f;
@@ -462,6 +493,32 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
   }
   m_prevAngleToAimPoint = angleToAimPoint;
   m_prevHeadingRequest=headingRequest;
+
+  m_fullTime += DT.count();
+  std::ofstream eiFile;
+        eiFile.open(folderName+"/eiLog.txt",std::ios_base::app);
+        eiFile<<m_sEi*m_sKi<<std::endl;
+        eiFile.close();
+  std::ofstream edFile;
+        edFile.open(folderName+"/edLog.txt",std::ios_base::app);
+        edFile<<ed*m_sKd<<std::endl;
+        edFile.close();
+  std::ofstream eFile;
+        eFile.open(folderName+"/eLog.txt",std::ios_base::app);
+        eFile<<e*m_sKp<<std::endl;
+        eFile.close();
+  std::ofstream aimFile;
+        aimFile.open(folderName+"/aimLog.txt",std::ios_base::app);
+        aimFile<<angleToAimPoint<<std::endl;
+        aimFile.close();
+  std::ofstream steerFile;
+        steerFile.open(folderName+"/steerLog.txt",std::ios_base::app);
+        steerFile<<headingRequest<<std::endl;
+        steerFile.close();
+  std::ofstream timeFile;
+        timeFile.open(folderName+"/timeLog.txt",std::ios_base::app);
+        timeFile<<m_fullTime<<std::endl;
+        timeFile.close();
 
   return std::make_tuple(headingRequest,distanceToAimPoint);
 }
