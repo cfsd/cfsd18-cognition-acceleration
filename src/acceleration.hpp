@@ -54,6 +54,10 @@ class Acceleration {
   uint32_t m_speedId2{0};
   int m_senderStamp{221};
   // steering
+  float m_correctionCooldown{0.3f};
+  float m_aimDeltaLimit{3.0f};
+  float m_k{2.0f};
+  bool m_useSteerRateControl{};
   bool m_usePathMemory{};
   bool m_useAimDistanceLapCounter{};
   float m_staticTrustInLastPathPoint{0.5f};
@@ -114,8 +118,12 @@ class Acceleration {
   float m_sEi;
   float m_aimClock;
   float m_prevAngleToAimPoint;
+  float m_aimPointRate;
+  int m_rateCount;
+  float m_timeSinceLastCorrection;
   float m_fullTime;
   std::string folderName;
+
   std::mutex m_sendMutex;
 };
 
