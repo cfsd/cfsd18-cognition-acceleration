@@ -440,15 +440,18 @@ std::tuple<float, float> Acceleration::driverModelSteering(Eigen::MatrixXf local
       m_aimPointRate += (angleToAimPoint - m_prevAngleToAimPoint) / DT.count();
       m_rateCount+=1;
       m_timeSinceLastCorrection += DT.count();
-      std::cout<<"m_aimPointRate sum: "<<m_aimPointRate<<" m_rateCount: "<<m_rateCount<<" m_timeSinceLastCorrection "<< m_timeSinceLastCorrection<<std::endl;
+      //std::cout<<"m_aimPointRate sum: "<<m_aimPointRate<<" m_rateCount: "<<m_rateCount<<" m_timeSinceLastCorrection "<< m_timeSinceLastCorrection<<std::endl;
       if (m_timeSinceLastCorrection > m_correctionCooldown){
         m_aimPointRate=m_aimPointRate/m_rateCount;
         steeringDelta = m_k * m_aimPointRate;
         headingRequest = m_prevHeadingRequest + steeringDelta;
-        std::cout<<"---- headingRequest" <<headingRequest<< "m_aimPointRate: "<<m_aimPointRate<<" steeringDelta: "<<steeringDelta<<std::endl;
+        //std::cout<<"---- headingRequest" <<headingRequest<< "m_aimPointRate: "<<m_aimPointRate<<" steeringDelta: "<<steeringDelta<<std::endl;
         m_rateCount=0;
         m_timeSinceLastCorrection=0.0f;
         m_aimPointRate=0.0f;
+      }
+      else{
+        headingRequest=m_prevHeadingRequest;
       }
     }
     else {
